@@ -2,13 +2,16 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { Plus, Building2, TrendingUp, Award, DollarSign, BarChart3 } from "lucide-react"
+import { Plus, Building2, TrendingUp, Award, DollarSign, BarChart3, LogOut, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { CorporateHierarchy } from "@/components/corporate-hierarchy"
+import { FamilyMemberForm } from "@/components/family-member-form"
 import { useToast } from "@/components/ui/use-toast"
 import { getFamilyMembers, addFamilyMember, addCouple, updateFamilyMember, deleteFamilyMember } from "@/lib/actions"
+import { getCurrentUser, logoutUser, requireAuth } from "@/lib/auth"
+import { useRouter } from "next/navigation"
 import type { FamilyMember } from "@/lib/file-storage"
 
 interface CoupleFormData {
@@ -23,7 +26,9 @@ export default function FamilyTreeApp() {
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<string | null>(null)
   const { toast } = useToast()
+  const router = useRouter()
 
   const [formData, setFormData] = useState<Partial<FamilyMember>>({
     firstName: "",
@@ -74,31 +79,25 @@ export default function FamilyTreeApp() {
   const [selectedParent, setSelectedParent] = useState<FamilyMember | null>(null)
   const [selectedForSpouse, setSelectedForSpouse] = useState<FamilyMember | null>(null)
 
-  const relationships = [
-    "Self",
-    "Spouse",
-    "Parent",
-    "Child",
-    "Sibling",
-    "Grandparent",
-    "Grandchild",
-    "Aunt/Uncle",
-    "Cousin",
-    "Other",
-  ]
-
-  // Load family data on component mount
+  // Check authentication and load data on component mount
   useEffect(() => {
-    const loadFamilyData = async () => {
+    const initializeApp = async () => {
       try {
-        setIsLoading(true)
+        // Check authentication
+        await requireAuth()
+
+        // Get current user
+        const user = await getCurrentUser()
+        setCurrentUser(user)
+
+        // Load family data
         const data = await getFamilyMembers()
         setFamilyMembers(data)
       } catch (error) {
-        console.error("Failed to load family data:", error)
+        console.error("Failed to initialize app:", error)
         toast({
           title: "Error",
-          description: "Failed to load family data. Please try again.",
+          description: "Failed to load application. Please try again.",
           variant: "destructive",
         })
       } finally {
@@ -106,23 +105,39 @@ export default function FamilyTreeApp() {
       }
     }
 
-    loadFamilyData()
+    initializeApp()
   }, [toast])
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser()
+      router.push("/login")
+      router.refresh()
+    } catch (error) {
+      console.error("Logout error:", error)
+      toast({
+        title: "Error",
+        description: "Failed to logout. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
 
   const getTotalDonations = () => {
     return familyMembers.reduce((total, member) => total + (member.donationAmount || 0), 0)
   }
 
   const getExecutiveCount = () => {
-    return familyMembers.filter((m) => ["Self", "Parent", "Grandparent", "Spouse"].includes(m.relationship)).length
+    return familyMembers.filter((m) => ["Self", "Parent", "Grandparent", "Spouse"].includes(m.relationship || ""))
+      .length
   }
 
   const getManagerCount = () => {
-    return familyMembers.filter((m) => ["Child", "Sibling", "Aunt/Uncle"].includes(m.relationship)).length
+    return familyMembers.filter((m) => ["Child", "Sibling", "Aunt/Uncle"].includes(m.relationship || "")).length
   }
 
   const getTeamMemberCount = () => {
-    return familyMembers.filter((m) => ["Grandchild", "Cousin", "Other"].includes(m.relationship)).length
+    return familyMembers.filter((m) => ["Grandchild", "Cousin", "Other"].includes(m.relationship || "")).length
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -461,9 +476,45 @@ export default function FamilyTreeApp() {
     setExpandedNodes(newExpanded)
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 flex items-center justify-center">
+        <Card className="text-center py-12 bg-white">
+          <CardContent>
+            <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading application...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 p-4">
       <div className="max-w-7xl mx-auto">
+        {/* Header with User Info and Logout */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center">
+            <Building2 className="h-8 w-8 text-blue-600 mr-3" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Family Tree</h1>
+              <p className="text-sm text-gray-600">Welcome back!</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            {currentUser && (
+              <div className="flex items-center text-sm text-gray-600">
+                <User className="h-4 w-4 mr-2" />
+                <span>{currentUser}</span>
+              </div>
+            )}
+            <Button variant="outline" onClick={handleLogout} className="flex items-center">
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </Button>
+          </div>
+        </div>
+
         {/* Corporate Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
@@ -536,6 +587,22 @@ export default function FamilyTreeApp() {
               </div>
             </CardContent>
           </Card>
+          <Card className="bg-white border-l-4 border-l-blue-500">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center">
+                  <Plus className="h-8 w-8 text-blue-600" />
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Add Member</p>
+                  </div>
+                </div>
+                <Button onClick={() => setIsAddDialogOpen(true)} variant="outline" size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Corporate Actions */}
@@ -545,10 +612,6 @@ export default function FamilyTreeApp() {
             Family Chart
           </h2>
           <div className="flex gap-2">
-            <Button onClick={() => setIsAddDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Member
-            </Button>
             <Button variant="outline" onClick={() => setExpandedNodes(new Set(familyMembers.map((m) => m.id)))}>
               Expand All
             </Button>
@@ -558,40 +621,59 @@ export default function FamilyTreeApp() {
           </div>
         </div>
 
+        {/* Corporate Hierarchy Display */}
+        {familyMembers.length === 0 ? (
+          <Card className="text-center py-12 bg-white">
+            <CardContent>
+              <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No team members yet</h3>
+              <p className="text-gray-600 mb-4">
+                Start building your organizational structure by adding your first team member.
+              </p>
+              <Button onClick={() => setIsAddDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="h-4 w-4 mr-2" />
+                Add First Member
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <CorporateHierarchy
+            familyMembers={familyMembers}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onAddChild={handleAddChild}
+            onAddSpouse={handleAddSpouse}
+            expandedNodes={expandedNodes}
+            onToggleExpanded={toggleExpanded}
+          />
+        )}
+
+        {/* Add/Edit Dialog */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          {/* Corporate Hierarchy Display */}
-          {isLoading ? (
-            <Card className="text-center py-12 bg-white">
-              <CardContent>
-                <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading family data...</p>
-              </CardContent>
-            </Card>
-          ) : familyMembers.length === 0 ? (
-            <Card className="text-center py-12 bg-white">
-              <CardContent>
-                <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No team members yet</h3>
-                <p className="text-gray-600 mb-4">
-                  Start building your organizational structure by adding your first team member.
-                </p>
-                <Button onClick={() => setIsAddDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add First Member
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <CorporateHierarchy
-              familyMembers={familyMembers}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onAddChild={handleAddChild}
-              onAddSpouse={handleAddSpouse}
-              expandedNodes={expandedNodes}
-              onToggleExpanded={toggleExpanded}
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>
+                {editingMember
+                  ? "Edit Family Member"
+                  : selectedParent
+                    ? "Add Child"
+                    : selectedForSpouse
+                      ? "Add Spouse"
+                      : "Add Family Member"}
+              </DialogTitle>
+            </DialogHeader>
+            <FamilyMemberForm
+              formData={formData}
+              setFormData={setFormData}
+              coupleFormData={coupleFormData}
+              setCoupleFormData={setCoupleFormData}
+              handleSubmit={handleSubmit}
+              editingMember={editingMember}
+              selectedParent={selectedParent}
+              selectedForSpouse={selectedForSpouse}
+              resetForm={resetForm}
             />
-          )}
+          </DialogContent>
         </Dialog>
       </div>
     </div>
