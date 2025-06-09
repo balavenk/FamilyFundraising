@@ -472,7 +472,13 @@ export default function FamilyTreeApp() {
             </Button>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button onClick={() => setEditingMember(null)} className="bg-blue-600 hover:bg-blue-700">
+                <Button
+                  onClick={() => {
+                    setEditingMember(null)
+                    setCoupleFormData((prev) => ({ ...prev, isCouple: true }))
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Member
                 </Button>
@@ -756,7 +762,7 @@ export default function FamilyTreeApp() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="gender">Gender</Label>
                           <Select
@@ -773,26 +779,6 @@ export default function FamilyTreeApp() {
                             </SelectContent>
                           </Select>
                         </div>
-                        {!selectedParent && !selectedForSpouse && (
-                          <div>
-                            <Label htmlFor="relationship">Role Level</Label>
-                            <Select
-                              value={formData.relationship || ""}
-                              onValueChange={(value) => setFormData((prev) => ({ ...prev, relationship: value }))}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select role level" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {relationships.map((rel) => (
-                                  <SelectItem key={rel} value={rel}>
-                                    {rel}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
                         <div>
                           <Label htmlFor="donationAmount">Temple Contribution ($)</Label>
                           <Input
