@@ -1,30 +1,15 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Plus, Building2, TrendingUp, Award, DollarSign, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog } from "@/components/ui/dialog"
 import { CorporateHierarchy } from "@/components/corporate-hierarchy"
-
-interface FamilyMember {
-  id: string
-  firstName: string
-  lastName: string
-  birthDate: string
-  deathDate: string
-  relationship: string
-  gender: string
-  location: string
-  phone: string
-  email: string
-  notes: string
-  parentId: string
-  spouseId: string
-  donationAmount: number
-}
+import { useToast } from "@/components/ui/use-toast"
+import { getFamilyMembers, addFamilyMember, addCouple, updateFamilyMember, deleteFamilyMember } from "@/lib/actions"
+import type { FamilyMember } from "@/lib/file-storage"
 
 interface CoupleFormData {
   husband: Partial<FamilyMember>
@@ -37,6 +22,9 @@ export default function FamilyTreeApp() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+  const [isLoading, setIsLoading] = useState(true)
+  const { toast } = useToast()
+
   const [formData, setFormData] = useState<Partial<FamilyMember>>({
     firstName: "",
     lastName: "",
@@ -52,6 +40,7 @@ export default function FamilyTreeApp() {
     spouseId: "",
     donationAmount: 0,
   })
+
   const [coupleFormData, setCoupleFormData] = useState<CoupleFormData>({
     husband: {
       firstName: "",
@@ -81,6 +70,7 @@ export default function FamilyTreeApp() {
     },
     isCouple: false,
   })
+
   const [selectedParent, setSelectedParent] = useState<FamilyMember | null>(null)
   const [selectedForSpouse, setSelectedForSpouse] = useState<FamilyMember | null>(null)
 
@@ -96,6 +86,28 @@ export default function FamilyTreeApp() {
     "Cousin",
     "Other",
   ]
+
+  // Load family data on component mount
+  useEffect(() => {
+    const loadFamilyData = async () => {
+      try {
+        setIsLoading(true)
+        const data = await getFamilyMembers()
+        setFamilyMembers(data)
+      } catch (error) {
+        console.error("Failed to load family data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load family data. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadFamilyData()
+  }, [toast])
 
   const getTotalDonations = () => {
     return familyMembers.reduce((total, member) => total + (member.donationAmount || 0), 0)
@@ -113,91 +125,147 @@ export default function FamilyTreeApp() {
     return familyMembers.filter((m) => ["Grandchild", "Cousin", "Other"].includes(m.relationship)).length
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (coupleFormData.isCouple) {
-      // Handle couple submission
-      if (!coupleFormData.husband.firstName || !coupleFormData.wife.firstName) return
+    try {
+      if (coupleFormData.isCouple) {
+        // Handle couple submission
+        if (!coupleFormData.husband.firstName || !coupleFormData.wife.firstName) return
 
-      const husbandId = Date.now().toString()
-      const wifeId = (Date.now() + 1).toString()
+        const husbandId = Date.now().toString()
+        const wifeId = (Date.now() + 1).toString()
 
-      const husband: FamilyMember = {
-        id: husbandId,
-        firstName: coupleFormData.husband.firstName || "",
-        lastName: coupleFormData.husband.lastName || "",
-        birthDate: coupleFormData.husband.birthDate || "",
-        deathDate: coupleFormData.husband.deathDate || "",
-        relationship: selectedParent ? "Child" : coupleFormData.husband.relationship || "",
-        gender: "Male",
-        location: coupleFormData.husband.location || "",
-        phone: coupleFormData.husband.phone || "",
-        email: coupleFormData.husband.email || "",
-        notes: coupleFormData.husband.notes || "",
-        parentId: selectedParent?.id || "",
-        spouseId: wifeId,
-        donationAmount: coupleFormData.husband.donationAmount || 0,
-      }
+        const husband: FamilyMember = {
+          id: husbandId,
+          firstName: coupleFormData.husband.firstName || "",
+          lastName: coupleFormData.husband.lastName || "",
+          birthDate: coupleFormData.husband.birthDate || "",
+          deathDate: coupleFormData.husband.deathDate || "",
+          relationship: selectedParent ? "Child" : coupleFormData.husband.relationship || "",
+          gender: "Male",
+          location: coupleFormData.husband.location || "",
+          phone: coupleFormData.husband.phone || "",
+          email: coupleFormData.husband.email || "",
+          notes: coupleFormData.husband.notes || "",
+          parentId: selectedParent?.id || "",
+          spouseId: wifeId,
+          donationAmount: coupleFormData.husband.donationAmount || 0,
+        }
 
-      const wife: FamilyMember = {
-        id: wifeId,
-        firstName: coupleFormData.wife.firstName || "",
-        lastName: coupleFormData.wife.lastName || "",
-        birthDate: coupleFormData.wife.birthDate || "",
-        deathDate: coupleFormData.wife.deathDate || "",
-        relationship: selectedParent ? "Child" : coupleFormData.wife.relationship || "",
-        gender: "Female",
-        location: coupleFormData.wife.location || "",
-        phone: coupleFormData.wife.phone || "",
-        email: coupleFormData.wife.email || "",
-        notes: coupleFormData.wife.notes || "",
-        parentId: selectedParent?.id || "",
-        spouseId: husbandId,
-        donationAmount: coupleFormData.wife.donationAmount || 0,
-      }
+        const wife: FamilyMember = {
+          id: wifeId,
+          firstName: coupleFormData.wife.firstName || "",
+          lastName: coupleFormData.wife.lastName || "",
+          birthDate: coupleFormData.wife.birthDate || "",
+          deathDate: coupleFormData.wife.deathDate || "",
+          relationship: selectedParent ? "Child" : coupleFormData.wife.relationship || "",
+          gender: "Female",
+          location: coupleFormData.wife.location || "",
+          phone: coupleFormData.wife.phone || "",
+          email: coupleFormData.wife.email || "",
+          notes: coupleFormData.wife.notes || "",
+          parentId: selectedParent?.id || "",
+          spouseId: husbandId,
+          donationAmount: coupleFormData.wife.donationAmount || 0,
+        }
 
-      setFamilyMembers((prev) => [...prev, husband, wife])
-    } else {
-      // Handle single person submission
-      if (!formData.firstName || !formData.lastName) return
+        const result = await addCouple(husband, wife)
 
-      const newMember: FamilyMember = {
-        id: editingMember?.id || Date.now().toString(),
-        firstName: formData.firstName || "",
-        lastName: formData.lastName || "",
-        birthDate: formData.birthDate || "",
-        deathDate: formData.deathDate || "",
-        relationship: selectedParent ? "Child" : selectedForSpouse ? "Spouse" : formData.relationship || "",
-        gender: formData.gender || "",
-        location: formData.location || "",
-        phone: formData.phone || "",
-        email: formData.email || "",
-        notes: formData.notes || "",
-        parentId: selectedParent?.id || "",
-        spouseId: selectedForSpouse?.id || "",
-        donationAmount: formData.donationAmount || 0,
-      }
+        if (result.success) {
+          toast({
+            title: "Success",
+            description: "Couple added successfully",
+          })
 
-      if (editingMember) {
-        setFamilyMembers((prev) => prev.map((member) => (member.id === editingMember.id ? newMember : member)))
+          // Update local state
+          setFamilyMembers((prev) => [...prev, husband, wife])
+        } else {
+          toast({
+            title: "Error",
+            description: result.message,
+            variant: "destructive",
+          })
+        }
       } else {
-        setFamilyMembers((prev) => {
-          const updated = [...prev, newMember]
+        // Handle single person submission
+        if (!formData.firstName || !formData.lastName) return
 
-          // If adding a spouse, update the selected person's spouseId
-          if (selectedForSpouse) {
-            return updated.map((member) =>
-              member.id === selectedForSpouse.id ? { ...member, spouseId: newMember.id } : member,
-            )
+        const newMember: FamilyMember = {
+          id: editingMember?.id || Date.now().toString(),
+          firstName: formData.firstName || "",
+          lastName: formData.lastName || "",
+          birthDate: formData.birthDate || "",
+          deathDate: formData.deathDate || "",
+          relationship: selectedParent ? "Child" : selectedForSpouse ? "Spouse" : formData.relationship || "",
+          gender: formData.gender || "",
+          location: formData.location || "",
+          phone: formData.phone || "",
+          email: formData.email || "",
+          notes: formData.notes || "",
+          parentId: selectedParent?.id || "",
+          spouseId: selectedForSpouse?.id || "",
+          donationAmount: formData.donationAmount || 0,
+        }
+
+        let result
+
+        if (editingMember) {
+          result = await updateFamilyMember(newMember)
+
+          if (result.success) {
+            // Update local state
+            setFamilyMembers((prev) => prev.map((member) => (member.id === editingMember.id ? newMember : member)))
           }
+        } else {
+          result = await addFamilyMember(newMember)
 
-          return updated
-        })
+          if (result.success) {
+            // Update local state
+            setFamilyMembers((prev) => {
+              const updated = [...prev, newMember]
+
+              // If adding a spouse, update the selected person's spouseId
+              if (selectedForSpouse) {
+                const updatedSpouse = {
+                  ...selectedForSpouse,
+                  spouseId: newMember.id,
+                }
+
+                // Also update the spouse in the database
+                updateFamilyMember(updatedSpouse)
+
+                return updated.map((member) => (member.id === selectedForSpouse.id ? updatedSpouse : member))
+              }
+
+              return updated
+            })
+          }
+        }
+
+        if (result?.success) {
+          toast({
+            title: "Success",
+            description: result.message,
+          })
+        } else {
+          toast({
+            title: "Error",
+            description: result?.message || "An error occurred",
+            variant: "destructive",
+          })
+        }
       }
-    }
 
-    resetForm()
+      resetForm()
+    } catch (error) {
+      console.error("Error submitting form:", error)
+      toast({
+        title: "Error",
+        description: "Failed to save data. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const resetForm = () => {
@@ -271,20 +339,45 @@ export default function FamilyTreeApp() {
     setIsAddDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    setFamilyMembers((prev) => {
-      // Remove spouse connection if exists
-      const memberToDelete = prev.find((m) => m.id === id)
-      let updated = prev.filter((member) => member.id !== id)
+  const handleDelete = async (id: string) => {
+    try {
+      const result = await deleteFamilyMember(id)
 
-      if (memberToDelete?.spouseId) {
-        updated = updated.map((member) =>
-          member.id === memberToDelete.spouseId ? { ...member, spouseId: "" } : member,
-        )
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "Family member deleted successfully",
+        })
+
+        // Update local state
+        setFamilyMembers((prev) => {
+          // Remove spouse connection if exists
+          const memberToDelete = prev.find((m) => m.id === id)
+          let updated = prev.filter((member) => member.id !== id)
+
+          if (memberToDelete?.spouseId) {
+            updated = updated.map((member) =>
+              member.id === memberToDelete.spouseId ? { ...member, spouseId: "" } : member,
+            )
+          }
+
+          return updated
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
       }
-
-      return updated
-    })
+    } catch (error) {
+      console.error("Error deleting family member:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete family member. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleAddChild = (parent: FamilyMember) => {
@@ -452,6 +545,10 @@ export default function FamilyTreeApp() {
             Family Chart
           </h2>
           <div className="flex gap-2">
+            <Button onClick={() => setIsAddDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Member
+            </Button>
             <Button variant="outline" onClick={() => setExpandedNodes(new Set(familyMembers.map((m) => m.id)))}>
               Expand All
             </Button>
@@ -463,7 +560,14 @@ export default function FamilyTreeApp() {
 
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           {/* Corporate Hierarchy Display */}
-          {familyMembers.length === 0 ? (
+          {isLoading ? (
+            <Card className="text-center py-12 bg-white">
+              <CardContent>
+                <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading family data...</p>
+              </CardContent>
+            </Card>
+          ) : familyMembers.length === 0 ? (
             <Card className="text-center py-12 bg-white">
               <CardContent>
                 <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
